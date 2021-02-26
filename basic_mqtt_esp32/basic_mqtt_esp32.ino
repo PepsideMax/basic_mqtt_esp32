@@ -4,18 +4,19 @@
 #include <TaskScheduler.h>
 #include "wifi.h"
 
-const char* mqtt_server  = "10.54.32.1";
+const char* mqtt_server  = "54.229.150.108";
 const int mqtt_port  = 1883;
 #define MQTT_SERIAL_PUBLISH_CH "r0704309/measurement"
 #define MQTT_SERIAL_RECEIVER_CH "r0704309/led"
+#define MQTT_SERIAL_PUBLISH_CH2 "r0704309/butt"
 const String DEVICE_ID = "r0704309";
 
-#define LED_PIN 19
-#define BUTT_PIN 1
+#define LED_PIN 2
+#define BUTT_PIN 19
 #define DHTPIN 18
 #define DHTTYPE DHT11
 
-
+int button = 0;
 DHT dht(DHTPIN, DHTTYPE);
 
 WiFiClient wifiClient;
@@ -80,10 +81,12 @@ void callback(char* topic, byte *payload, unsigned int length) {
     if(value == 49){                //1 in ASCII
       digitalWrite(LED_PIN,1);
       Serial.print("Turning on LED");
+      button = 1;
     }
     else if(value == 48){         //0 in ASCII
       digitalWrite(LED_PIN,0);
       Serial.print("Turning off LED");
+      button = 0;
     }
     
     Serial.println();
@@ -118,7 +121,6 @@ void setup() {
   
   // We activate the task
   readDHT.enable();
-  attachInterrupt(digitalPinToInterrupt(BUTT_PIN), button_isr, RISING);
 }
 
 void publishSerialData(char *serialData){
@@ -130,7 +132,6 @@ void publishSerialData(char *serialData){
 
 
 
-
 void loop() {
    client.loop();
 //   if (Serial.available() > 0) {
@@ -139,12 +140,28 @@ void loop() {
 //     Serial.readBytesUntil( '\n',mun,500);
 //     publishSerialData(mun);
 //   }
-
+  button_isr();
   runner.execute();
   delay(10);
    
 }
 void button_isr(){
+    int buttonState = digitalRead(BUTT_PIN);
+    if(buttonState ==LOW){
+    button ++; 
+    if (button > 1){
+      button = 0;
+    }
+    while (buttonState == LOW){
+      buttonState = digitalRead(BUTT_PIN);
+    }
+      String json = "{\"device_id\":\""+DEVICE_ID+"\",\"pressed\":\""+String(button)+"\"}";
+      char jsondata[json.length()+1];
+      json.toCharArray(jsondata,json.length()+1);
+      publishSerialData(jsondata);
+    }
+
+
 }
 
 void read_dht(){
@@ -156,7 +173,7 @@ void read_dht(){
     return;
   }
   else{
-    String json = "{\"device_id\":\""+DEVICE_ID+"\",\"temperature\":\""+String(t)+"\",\"humidity\":\""+String(h)+"\"}";
+    String json = "{\"device_id\":\""+DEVICE_ID+"\",\"temperature\":\""+String(t)+"\",\"humidity\":\""+String(h)+"\",\"pressed\":\""+String(button)+"\"}";
     char jsondata[json.length()+1];
     json.toCharArray(jsondata,json.length()+1);
     publishSerialData(jsondata);
